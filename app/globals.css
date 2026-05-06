@@ -1,0 +1,64 @@
+/* ReactFlow base styles – must precede Tailwind to allow overrides */
+@import "reactflow/dist/style.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+  background: #070709;
+  color: #e6e6ea;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  /* No scrollbars on the main frame — we're a native app */
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: #2a2a35; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3a48; }
+
+/* React Flow canvas overrides */
+.react-flow__background { background-color: #070709; }
+
+.react-flow__edge-path {
+  stroke: #6366f1;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.55));
+}
+
+.react-flow__handle {
+  width: 10px;
+  height: 10px;
+  background: #a855f7;
+  border: 2px solid #0b0b0f;
+}
+
+.react-flow__controls {
+  background: #0b0b0f;
+  border: 1px solid #1f1f29;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.react-flow__controls-button {
+  background: #0b0b0f !important;
+  color: #e6e6ea !important;
+  border-bottom: 1px solid #1f1f29 !important;
+  box-shadow: none !important;
+}
+
+.react-flow__controls-button:hover { background: #16161f !important; }
+
+.react-flow__minimap { border-radius: 8px; }

@@ -1,0 +1,21 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+.env
+.env.local
+.env.*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+*.tsbuildinfo
+next-env.d.ts
+.vercel
+
+# Electron build artifacts
+dist-electron/
+release/
+build-assets/
+*.asar
