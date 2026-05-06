@@ -6,14 +6,22 @@ import { cn } from "@/lib/utils";
 
 export default function TitleBar() {
   const [maximized, setMaximized] = useState(false);
-  const isElectron = typeof window !== "undefined" && !!window.electronAPI;
+  // SSR ile client ilk render'ı eşleşsin diye mount sonra Electron'u kontrol ediyoruz.
+  // Aksi halde server'da `null` dönerken client'ta SVG ikonları render edilir → hydration mismatch.
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isElectron = mounted && typeof window !== "undefined" && !!window.electronAPI;
 
   useEffect(() => {
     if (!isElectron) return;
-    // Sync icon on mount
     window.electronAPI!.isMaximized().then(setMaximized);
   }, [isElectron]);
 
+  if (!mounted) return null;
   if (!isElectron) return null;
 
   const handleMinimize  = () => window.electronAPI!.minimizeWindow();

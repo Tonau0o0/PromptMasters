@@ -6,7 +6,8 @@ import { useStore } from "@/store/useStore";
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const TABULAR_EXTS = new Set(["csv", "xlsx", "xls"]);
-const DOC_EXTS     = new Set(["pdf", "docx", "doc"]);
+const DOC_EXTS = new Set(["pdf", "docx", "doc"]);
+const ALL_EXTS = [...TABULAR_EXTS, ...DOC_EXTS];
 
 function extOf(name: string) {
   return name.split(".").pop()?.toLowerCase() ?? "";
@@ -16,141 +17,154 @@ function labelOf(name: string) {
   return name.replace(/\.[^.]+$/, "");
 }
 
+function basenameOf(filePath: string) {
+  return filePath.replace(/\\/g, "/").split("/").pop() ?? "dosya";
+}
+
+interface ApiTabularResponse {
+  basari: boolean;
+  dosya_adi: string;
+  dosya_turu: string;
+  meta: unknown;
+}
+
+interface ApiDocumentResponse {
+  basari: boolean;
+  file_id: string;
+  dosya_adi: string;
+  dosya_turu: string;
+  parca_sayisi: number;
+  mesaj: string;
+}
+
 export function useFileUpload(nodeId: string) {
   const patchNodeData = useStore((s) => s.patchNodeData);
   const isElectron =
     typeof window !== "undefined" && !!window.electronAPI?.isElectron;
 
-  /** Apply upload result coming from any endpoint */
-  const applyResult = useCallback(
-    (json: Record<string, unknown>, ext: string, fileName: string) => {
-      if (TABULAR_EXTS.has(ext)) {
-        patchNodeData(nodeId, {
-          uploadStatus: "done",
-          label: labelOf(fileName),
-          fileType: ext.toUpperCase(),
-          tabularMeta: json.meta as never,
-          documentFileId: undefined,
-          documentChunks: undefined,
-        });
-      } else {
-        patchNodeData(nodeId, {
-          uploadStatus: "done",
-          label: labelOf(fileName),
-          fileType: ext.toUpperCase(),
-          documentFileId: json.file_id as string,
-          documentChunks: json.parca_sayisi as number,
-          tabularMeta: undefined,
-        });
-      }
-    },
-    [nodeId, patchNodeData],
-  );
-
-  const handleError = useCallback(
-    (err: unknown) => {
-      patchNodeData(nodeId, {
-        uploadStatus: "error",
-        uploadError:
-          err instanceof Error ? err.message : "Bilinmeyen bir hata oluştu.",
-      });
+  const setError = useCallback(
+    (message: string) => {
+      patchNodeData(nodeId, { uploadStatus: "error", uploadError: message });
     },
     [nodeId, patchNodeData],
   );
 
   /**
-   * ELECTRON PATH: Open native OS dialog → send absolute file path to backend.
-   * The backend reads directly from disk — no file copy or memory overhead.
+   * Asıl upload akışı: status patch → fetch → response patch.
+   * Hem Electron native path hem browser multipart path bunu kullanır;
+   * tek farkları `request` callback'inin ne döndürdüğüdür.
    */
-  const openNativeDialog = useCallback(async () => {
-    if (!window.electronAPI) return;
-
-    const filePath = await window.electronAPI.openFileDialog([
-      {
-        name: "Desteklenen Dosyalar",
-        extensions: ["csv", "xlsx", "xls", "pdf", "docx", "doc"],
-      },
-    ]);
-    if (!filePath) return; // user cancelled
-
-    const fileName = filePath.replace(/\\/g, "/").split("/").pop() ?? "dosya";
-    const ext = extOf(fileName);
-
-    if (!TABULAR_EXTS.has(ext) && !DOC_EXTS.has(ext)) {
-      patchNodeData(nodeId, {
-        uploadStatus: "error",
-        uploadError: `Desteklenmeyen dosya türü: .${ext}`,
-      });
-      return;
-    }
-
-    patchNodeData(nodeId, {
-      uploadStatus: "uploading",
-      uploadError: undefined,
-      fileName,
-      fileType: ext.toUpperCase(),
-    });
-
-    const endpoint = TABULAR_EXTS.has(ext) ? "tabular-path" : "document-path";
-
-    try {
-      const res = await fetch(`${API}/upload/${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ file_path: filePath }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.detail ?? "Sunucu hatası");
-      applyResult(json, ext, fileName);
-
-      window.electronAPI?.notify(
-        "Dosya İşlendi",
-        `"${fileName}" başarıyla yüklendi.`,
-      );
-    } catch (err) {
-      handleError(err);
-    }
-  }, [nodeId, patchNodeData, applyResult, handleError]);
-
-  /**
-   * BROWSER FALLBACK: Standard <input type="file"> → multipart upload.
-   */
-  const uploadFile = useCallback(
-    async (file: File) => {
-      const ext = extOf(file.name);
+  const runUpload = useCallback(
+    async (params: {
+      fileName: string;
+      ext: string;
+      request: () => Promise<Response>;
+    }) => {
+      const { fileName, ext, request } = params;
 
       if (!TABULAR_EXTS.has(ext) && !DOC_EXTS.has(ext)) {
-        patchNodeData(nodeId, {
-          uploadStatus: "error",
-          uploadError: `Desteklenmeyen dosya türü: .${ext}`,
-        });
+        setError(`Desteklenmeyen dosya türü: .${ext}`);
         return;
       }
 
       patchNodeData(nodeId, {
         uploadStatus: "uploading",
         uploadError: undefined,
-        fileName: file.name,
+        fileName,
         fileType: ext.toUpperCase(),
       });
 
-      const endpoint = TABULAR_EXTS.has(ext) ? "tabular" : "document";
-      const form = new FormData();
-      form.append("file", file);
-
       try {
-        const res = await fetch(`${API}/upload/${endpoint}`, {
-          method: "POST",
-          body: form,
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json.detail ?? "Sunucu hatası");
-        applyResult(json, ext, file.name);
+        const res = await request();
+        const json = (await res.json()) as Record<string, unknown>;
+        if (!res.ok) {
+          throw new Error((json.detail as string) ?? "Sunucu hatası");
+        }
+
+        if (TABULAR_EXTS.has(ext)) {
+          const data = json as unknown as ApiTabularResponse;
+          patchNodeData(nodeId, {
+            uploadStatus: "done",
+            label: labelOf(fileName),
+            fileType: ext.toUpperCase(),
+            tabularMeta: data.meta as never,
+            documentFileId: undefined,
+            documentChunks: undefined,
+          });
+        } else {
+          const data = json as unknown as ApiDocumentResponse;
+          patchNodeData(nodeId, {
+            uploadStatus: "done",
+            label: labelOf(fileName),
+            fileType: ext.toUpperCase(),
+            documentFileId: data.file_id,
+            documentChunks: data.parca_sayisi,
+            tabularMeta: undefined,
+          });
+        }
       } catch (err) {
-        handleError(err);
+        setError(
+          err instanceof Error ? err.message : "Bilinmeyen bir hata oluştu.",
+        );
       }
     },
-    [nodeId, patchNodeData, applyResult, handleError],
+    [nodeId, patchNodeData, setError],
+  );
+
+  /**
+   * ELECTRON: Native dialog → mutlak yol → backend diskten okur.
+   */
+  const openNativeDialog = useCallback(async () => {
+    if (!window.electronAPI) return;
+
+    const filePath = await window.electronAPI.openFileDialog([
+      { name: "Desteklenen Dosyalar", extensions: ALL_EXTS },
+    ]);
+    if (!filePath) return;
+
+    const fileName = basenameOf(filePath);
+    const ext = extOf(fileName);
+    const endpoint = TABULAR_EXTS.has(ext) ? "tabular-path" : "document-path";
+
+    await runUpload({
+      fileName,
+      ext,
+      request: () =>
+        fetch(`${API}/upload/${endpoint}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ file_path: filePath }),
+        }),
+    });
+
+    window.electronAPI?.notify(
+      "Dosya İşlendi",
+      `"${fileName}" başarıyla yüklendi.`,
+    );
+  }, [runUpload]);
+
+  /**
+   * BROWSER: <input type="file"> → multipart upload.
+   */
+  const uploadFile = useCallback(
+    async (file: File) => {
+      const ext = extOf(file.name);
+      const endpoint = TABULAR_EXTS.has(ext) ? "tabular" : "document";
+
+      await runUpload({
+        fileName: file.name,
+        ext,
+        request: () => {
+          const form = new FormData();
+          form.append("file", file);
+          return fetch(`${API}/upload/${endpoint}`, {
+            method: "POST",
+            body: form,
+          });
+        },
+      });
+    },
+    [runUpload],
   );
 
   return { openNativeDialog, uploadFile, isElectron };

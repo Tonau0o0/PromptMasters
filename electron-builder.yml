@@ -13,13 +13,10 @@ files:
   - package.json
 
 extraResources:
-  - from: backend
-    to: backend
-    filter:
-      - "**/*.py"
-      - "requirements.txt"
-      - "!**/__pycache__/**"
-      - "!**/*.pyc"
+  # PyInstaller ile üretilmiş standalone backend bundle'ı.
+  # `npm run backend:build` çıktısı: dist-backend/neuro-backend/{neuro-backend(.exe), _internal/...}
+  - from: dist-backend/neuro-backend
+    to: backend-bin
 
 win:
   target:

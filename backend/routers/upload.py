@@ -1,12 +1,14 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
-from fastapi.responses import JSONResponse
+"""
+Browser upload endpoints — multipart/form-data ile gelen dosyaları işler.
+"""
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
-from services.tabular import process_csv, process_xlsx
-from services.document import process_document
+from schemas import DocumentUploadResponse, TabularUploadResponse
+from services.upload_pipeline import handle_document, handle_tabular
 
 router = APIRouter()
 
-_MAX_BYTES = 20 * 1024 * 1024  # 20 MB hard limit
+_MAX_BYTES = 20 * 1024 * 1024  # 20 MB
 
 
 def _guard_size(raw: bytes, filename: str) -> None:
@@ -17,60 +19,17 @@ def _guard_size(raw: bytes, filename: str) -> None:
         )
 
 
-@router.post("/tabular")
+@router.post("/tabular", response_model=TabularUploadResponse)
 async def upload_tabular(file: UploadFile = File(...)):
-    """
-    CSV veya XLSX yükle.
-    Yanıt: şema + ilk 5 satır önizleme.
-    KURAL: Tam veri asla döndürülmez.
-    """
+    """CSV/XLSX yükle → şema + ilk 5 satır önizleme. Tam veri asla döndürülmez."""
     raw = await file.read()
     _guard_size(raw, file.filename or "dosya")
-
-    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
-
-    try:
-        if ext == "csv":
-            meta = process_csv(raw)
-        elif ext in ("xlsx", "xls"):
-            meta = process_xlsx(raw)
-        else:
-            raise HTTPException(
-                status_code=415,
-                detail=f"Desteklenmeyen dosya türü: .{ext}. Lütfen CSV veya XLSX yükleyin.",
-            )
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    return JSONResponse(
-        content={
-            "basari": True,
-            "dosya_adi": file.filename,
-            "dosya_turu": ext.upper(),
-            "meta": meta,
-        }
-    )
+    return handle_tabular(raw, file.filename or "dosya")
 
 
-@router.post("/document")
+@router.post("/document", response_model=DocumentUploadResponse)
 async def upload_document(file: UploadFile = File(...)):
-    """
-    PDF veya DOCX yükle → ChromaDB'ye gömülür.
-    Yanıt: file_id + parça sayısı. Tam içerik asla döndürülmez.
-    """
+    """PDF/DOCX yükle → ChromaDB'ye gömülür. Yanıt: file_id + parça sayısı."""
     raw = await file.read()
     _guard_size(raw, file.filename or "dosya")
-
-    ext = (file.filename or "").rsplit(".", 1)[-1].lower()
-    if ext not in ("pdf", "docx", "doc"):
-        raise HTTPException(
-            status_code=415,
-            detail=f"Desteklenmeyen dosya türü: .{ext}. Lütfen PDF veya DOCX yükleyin.",
-        )
-
-    try:
-        result = process_document(raw, file.filename or "belge")
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    return JSONResponse(content={"basari": True, **result})
+    return handle_document(raw, file.filename or "belge")

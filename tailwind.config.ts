@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import { NODE_COLORS } from "./lib/theme";
 
 const config: Config = {
   content: [
@@ -13,11 +14,7 @@ const config: Config = {
           900: "#0b0b0f",
           950: "#070709",
         },
-        neural: {
-          core: "#a855f7",
-          data: "#22d3ee",
-          feature: "#f59e0b",
-        },
+        neural: NODE_COLORS,
       },
       boxShadow: {
         glow: "0 0 24px rgba(168, 85, 247, 0.45)",

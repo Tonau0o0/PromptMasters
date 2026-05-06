@@ -19,3 +19,16 @@ dist-electron/
 release/
 build-assets/
 *.asar
+
+# Python / backend
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+backend/storage/
+outputs/
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db

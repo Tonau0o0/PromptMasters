@@ -4,11 +4,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Marker so the renderer can detect it's running inside Electron
   isElectron: true,
 
-  // Native file-open dialog
-  // filters: [{ name: string; extensions: string[] }]
-  // Returns the absolute file path string, or null if cancelled
-  openFileDialog: (filters) =>
-    ipcRenderer.invoke("dialog:open-file", filters),
+  // Native file-open dialog (data upload) — returns absolute path or null
+  openFileDialog: (filters) => ipcRenderer.invoke("dialog:open-file", filters),
+
+  // Brain persistence
+  exportBrain: (defaultName, content) =>
+    ipcRenderer.invoke("brain:export", { defaultName, content }),
+  importBrain: () => ipcRenderer.invoke("brain:import"),
 
   // Window controls
   minimizeWindow: () => ipcRenderer.send("window:minimize"),

@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "electron:dev": "concurrently --kill-others-on-fail --names \"NEXT,ELECTRON\" --prefix-colors \"cyan,magenta\" \"npm run dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "next build && electron-builder --config electron-builder.yml",
+    "backend:build": "uv run --group dev pyinstaller backend/main.spec --distpath dist-backend --workpath build-backend --noconfirm",
+    "electron:build": "npm run backend:build && next build && electron-builder --config electron-builder.yml",
     "electron:preview": "cross-env NODE_ENV=production electron ."
   },
   "dependencies": {
